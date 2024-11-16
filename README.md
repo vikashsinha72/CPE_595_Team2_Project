@@ -1,4 +1,4 @@
-### Predicting Airline Ticket Pricing
+### Demand Forecasting to Optimize Supply Chain Management
 
 **Submitted by Team 2(Carlos Iturralde, Vikash Sinha, Olaoluwa Olasanoye)**
 
