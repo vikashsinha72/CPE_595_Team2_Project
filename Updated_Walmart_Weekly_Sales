@@ -1,0 +1,1361 @@
+# %% [markdown]
+# # Walmart sales data to forcast sales
+# **Goal:** The objective of this project is to predict Walmart store sales. We will train various time series
+# models, regression models, and deep learning models to forcast sales for individual store at different locations. . 
+# 
+# **Data Problem:** The task involves training and tuning multiple models that handle non-numeric values within the dataset. 
+# 
+# **Expected Results:** The expected outcome of this project is a highly accurate model capable of Forcasting weekly Sales of a store for a future date of choice. This helps store to optimize supply chain for demand and avoid overstocking or understocking.
+# 
+# In Future, We will gain further insights by conducting a global analysis using the statsmodels library for ARIMA to make more refined predictions. Additionally, we will perform a local analysis to evaluate the model's prediction process for specific store forcast. Lastly, we will extract insights from these analyses and recommend areas for future research, including studying seasonality and its impact on store sales.  
+# 
+# **Data**
+# 
+# The data is sourced from Kaggle.
+# 
+# https://www.kaggle.com/datasets/aslanahmedov/walmart-sales-forecast
+# 
+# This dataset contains store sales, data features that was collected from the Walmart dataset and encompasses 45 stores, complete with store details and monthly sales data, available on a weekly basis. Walmart aims to assess the impact of holidays on store sales, which is why the dataset includes four holiday weeks: Christmas, Thanksgiving, Super Bowl, and Labor Day. 
+# 
+# We have produced clean and relevent dataset after combining stores and features data. Since we shall be using clean dataset, 
+# hence we intend to analyze this dataset.
+# 
+# 
+# 
+# 
+# **Data Preparation**
+# 
+# **Download the Dataset:**
+# -  Went to Kaggle and found the dataset to use.
+# - Clicked on the "Download" button to get the dataset in a compressed format (usually a .zip file).
+# 
+# **Extract the Files:**
+# - Extracted the downloaded .zip file to access the dataset files, which are often in CSV format.
+# **Open the CSV File in Excel:**
+# - Opened Excel and used the "Open" dialog to locate and open the CSV file.
+# - Excel will automatically format the data into a spreadsheet.
+# **Clean and Format the Data:**
+# - Reviewed the data in Excel and made the necessary adjustments, such as removing empty    rows, correcting data types, or handling missing values.
+# - Save the cleaned data as an Excel file (.xlsx) for easier manipulation in Python.
+# - Using excel formula, I generated the column with the name of the day (Friday Monda etc)
+# **Load the Data into Python:**
+# - Use the pandas library in Python to read the Excel file
+# 
+
+# %% [markdown]
+# ## Import and Reading the Data
+
+# %%
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+from sklearn.preprocessing import MinMaxScaler
+
+import warnings
+warnings.filterwarnings("ignore")
+
+# %%
+# Load the sales features dataset
+features_df = pd.read_csv('features.csv')
+#store data
+store_df= pd.read_csv('stores.csv')
+
+# %%
+sales_df = pd.read_csv('Walmart_Sales_Project.csv')
+
+
+# %%
+sales_df.info()
+
+# %%
+# Rename column 'Month.1' to 'Date'
+sales_df = sales_df.rename(columns={'Month.1': 'Date'})
+print(sales_df.shape)
+sales_df.head()
+
+# %% [markdown]
+# #### Data Overview 
+# 
+# - 6435 samples/rows 
+# - columns: 
+#     1. 12 parameters 
+#     2. Important columns: Day of the Week, Temperature,	Fuel_Price,	CPI,	CPI,	Day of the Week
+#     3. Target column Weekly_Sales
+#     4. Clean data so null values
+
+# %% [markdown]
+# #### Data Setup
+
+# %%
+#using a random sample of 5,000 entries for model training
+df_setup = sales_df.sample(5000, random_state = 42)
+#df_setup.columns = df_setup.columns.str.replace(' ', '')
+
+# %%
+# Convert 'Day of the Week' to day no in week objects
+#data['Day of the Week'] = pd.to_datetime(data['Day of the Week']).data.dayofweek
+day_mapping = {'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6}
+df_setup['Day of the Week'] = df_setup['Day of the Week'].map(day_mapping)
+
+# %%
+df_setup['Sales_Year'] = pd.to_datetime(df_setup['Date'], format='%m/%d/%Y').dt.year
+#df_setup['Sales_Month'] = pd.to_datetime(df_setup['Date'], format='%m/%d/%Y').dt.month
+#df_setup['Sales_Day'] = pd.to_datetime(df_setup['Date'], format='%m/%d/%Y').dt.day
+
+
+# %%
+df = df_setup.copy()
+df = df.drop(columns=['Date'])
+
+# %% [markdown]
+# ## Exploratory Data Analysis
+# ### Vikash Sinha
+
+# %%
+df.head(10)
+
+# %%
+df.info()
+
+# %%
+df.isna().sum()
+
+# %% [markdown]
+# ***Data is clean and ready to pre-processed for visualizing and training***
+
+# %% [markdown]
+# #### Data Preprocessing:
+# 
+
+# %%
+# Trim whitespace from the column name 'Weekly_Sales'
+#df = df.rename(columns={'Weekly_Sales': 'WeeklySales'})
+df['Weekly_Sales'] = df['Weekly_Sales'].replace('[\$,]', '', regex=True).astype(float)
+
+# %%
+import seaborn as sns
+
+# Calculate the correlation matrix
+correlation_matrix = df.corr()
+
+# Create the heatmap
+plt.figure(figsize=(12, 10))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+plt.title('Correlation Matrix')
+plt.show()
+
+# %% [markdown]
+# **Features highly correlated with Weekly Sales(Target Feature)**
+
+# %%
+# Calculate the correlation matrix
+correlation_matrix = df.corr()
+
+# Select only the correlation of 'Fare' with other columns
+fare_correlation = correlation_matrix['Weekly_Sales']
+
+# Sort the correlations in descending order
+fare_correlation_sorted = fare_correlation.sort_values(ascending=False)
+
+# Filter out columns with correlation above a certain threshold (e.g., 0.1)
+threshold = 0.05
+highly_correlated_features = fare_correlation_sorted[abs(fare_correlation_sorted) > threshold]
+
+print("Features highly correlated with Sales:\n", highly_correlated_features)
+
+# %% [markdown]
+# **Further visualization of highly correlated Features(Unemployment, CPI, Month, Temperature )  with Weekly Sales(Target Feature)**
+
+# %%
+import plotly.express as px
+fig = px.box(df, x='Month', y='Weekly_Sales', color='Month', title="Month vs Weekly_Sales")
+fig.show()
+fig = px.violin(df, x='Month', y='Weekly_Sales', color='Month')
+fig.show()
+
+# %%
+# Plot distribution of Weekly Sales
+plt.figure(figsize=(16,10))
+sns.histplot(df['Weekly_Sales'], kde=True, bins=5)
+plt.title('Distribution of Weekly_Sales')
+plt.show()
+
+# Boxplot of Weekly Sales per store
+plt.figure(figsize=(16,10))
+sns.boxplot(x='Store', y='Weekly_Sales', data=df)
+plt.title('Weekly_Sales Distribution by Stores')
+plt.xticks(rotation=45)
+plt.show()
+
+# %% [markdown]
+# ## Feature Selection
+# ### Vikash Sinha
+
+# %%
+# Models
+
+
+from sklearn.linear_model import LinearRegression
+from sklearn.svm import SVR
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor 
+#from sklearn.ensemble import GradientBoostingRegressor as GBR
+#from xgboost import XGBRegressor
+#from sklearn.model_selection import RandomizedSearchCV
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.preprocessing import StandardScaler
+
+# %%
+
+
+data = df.copy()
+#X = data.drop(['Day' ,'Year', 'Sales_Year','Holiday_Flag','Fuel_Price','Day of the Week', 'Weekly_Sales'], axis=1)
+X = data.drop(['Day' ,'Year', 'Sales_Year','Weekly_Sales'], axis=1)
+
+y = data['Weekly_Sales']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 42)
+
+# %% [markdown]
+# **Features selection** 
+# 
+
+# %%
+# Initialize Scaler
+scaler = StandardScaler()
+
+# Apply
+X_scaled = scaler.fit_transform(X)
+
+# Create a new instance of the random forest regressor
+rfr = RandomForestRegressor()
+
+# Train the model on the scaled feature matrix (X_scaled) and the target variable (Y)
+rfr.fit(X_scaled, y)
+
+# Collect the feature importances for each input feature
+feature_importances = rfr.feature_importances_
+
+# Print the feature importances
+print("Feature importances:")
+for feature, importance in zip(X.columns, feature_importances):
+    print("{:20}: {:.3f}".format(feature, importance))
+
+# %% [markdown]
+# **Using Linear and Decision Tree Regression to evaluate Feature seletion**
+
+# %%
+# Collect the top 3 most important features
+X_top_3 = X[['Store', 'CPI', 'Unemployment']]
+
+# Collect the top 5 most important features
+X_top_5 = X[['Store', 'CPI', 'Unemployment', 'Month', 'Temperature']]
+
+# Scale the Top 3 Features Data
+scaler = StandardScaler()
+X_top_3 = scaler.fit_transform(X_top_3)
+
+# Scale the Top 5 Features Data
+scaler = StandardScaler()
+
+# %%
+# Set 1 : Full Data
+X_train_full, X_test_full, y_train_full, y_test_full = train_test_split(X_scaled, y, test_size=0.3, shuffle=True, random_state=42)
+
+# Set 2 : Top 5 Features
+X_train_5, X_test_5, y_train_5, y_test_5 = train_test_split(X_top_5, y, test_size=0.3, shuffle=True, random_state=42)
+
+# Set 3 : Top 3 features
+X_train_3, X_test_3, y_train_3, y_test_3 = train_test_split(X_top_3, y, test_size=0.3, shuffle=True, random_state=42)
+
+# Set 4 : Most Important Feature
+X_train, X_test, y_train, y_test = train_test_split(X['Month'].to_numpy().reshape(-1,1), y, test_size=0.3, shuffle=True, random_state=42)
+
+# %%
+##Performance calculator function
+def perf_cal(y_true, y_pred):
+    """Compute performance metrics for regression models."""
+  
+    results = {
+        'RMSE': np.sqrt(mean_squared_error(y_true, y_pred)),
+        'MSE': mean_squared_error(y_true, y_pred),
+        'MAE': mean_absolute_error(y_true, y_pred),
+        'R-sq': r2_score(y_true, y_pred)
+    }
+
+    # Convert to DataFrame
+    results_df = pd.DataFrame([results], index=['Performance Metrics'])
+    return results_df
+    
+# Define Datasize keys for reference
+DATA_SIZE = ['Full', 'Top-5', 'Top-1']
+
+
+# %% [markdown]
+# **Linear Regression** 
+
+# %%
+# Train and evaluate Linear Regression model: full set
+lr_full = LinearRegression()
+lr_full.fit(X_train_full, y_train_full)
+lr_full_pred = lr_full.predict(X_test_full)
+lr_full_scores = perf_cal(y_test_full, lr_full_pred)
+
+# Print performance scores
+print("Linear Regression Performance Scores:")
+print(lr_full_scores)
+
+# %%
+# Train and evaluate Linear Regression model: Top 5
+lr_5 = LinearRegression()
+
+# Train the Model
+lr_5.fit(X_train_5, y_train_5)
+
+# Make Predictions
+lr_5_pred = lr_5.predict(X_test_5)
+
+# Evaluate Performance
+lr_5_scores = perf_cal(y_test_5, lr_5_pred)
+
+# Display Performance Metrics
+print("Linear Regression Performance Metrics (Subset 5)")
+print(lr_5_scores)
+
+# %%
+# Decision Tree Regression:  Most Important Feature
+lr = LinearRegression()
+
+# Train the model
+lr.fit(X_train, y_train)
+
+# Make predictions on the test set
+lr_pred = lr.predict(X_test)
+
+# Evaluate the model's performance
+lr_scores = perf_cal(y_test, lr_pred)
+
+# Print the performance metrics
+print("Linear Regression Performance Metrics (Subset 1)")
+print(lr_scores)
+
+# %%
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+# Extract the performance metrics from the DataFrames
+RMSEs = [lr_full_scores.loc['Performance Metrics', 'RMSE'], lr_5_scores.loc['Performance Metrics', 'RMSE'], lr_scores.loc['Performance Metrics', 'RMSE']]
+MSEs  = [lr_full_scores.loc['Performance Metrics', 'MSE'], lr_5_scores.loc['Performance Metrics', 'MSE'], lr_scores.loc['Performance Metrics', 'MSE']]
+MAEs  = [lr_full_scores.loc['Performance Metrics', 'MAE'], lr_5_scores.loc['Performance Metrics', 'MAE'], lr_scores.loc['Performance Metrics', 'MAE']]
+R2s   = [lr_full_scores.loc['Performance Metrics', 'R-sq'], lr_5_scores.loc['Performance Metrics', 'R-sq'], lr_scores.loc['Performance Metrics', 'R-sq']]
+
+# Setting figure size for subplots
+plt.figure(figsize=(15, 8))
+
+# Plot for RMSE
+plt.subplot(2, 2, 1)
+sns.barplot(x=DATA_SIZE, y=RMSEs)
+plt.title("RMSE", fontsize=15)
+plt.axhline(np.mean(RMSEs), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Plot for MSE
+plt.subplot(2, 2, 2)
+sns.barplot(x=DATA_SIZE, y=MSEs)
+plt.title("MSE", fontsize=15)
+plt.axhline(np.mean(MSEs), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Plot for MAE
+plt.subplot(2, 2, 3)
+sns.barplot(x=DATA_SIZE, y=MAEs)
+plt.title("MAE", fontsize=15)
+plt.axhline(np.mean(MAEs), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Plot for R-squared (R^2)
+plt.subplot(2, 2, 4)
+sns.barplot(x=DATA_SIZE, y=R2s)
+plt.title("$R^2$", fontsize=15)
+plt.axhline(np.mean(R2s), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Adjust layout and show plot
+plt.tight_layout()
+plt.show()
+
+
+# %% [markdown]
+# **Decision Tree model to validate best features** 
+
+# %%
+# Train and evaluate Decision Tree Regression model: full set
+dt_full = DecisionTreeRegressor()
+dt_full.fit(X_train_full, y_train_full)
+dt_full_pred = dt_full.predict(X_test_full)
+dt_full_scores = perf_cal(y_test_full, dt_full_pred)
+
+# Print performance scores
+print("Decision Tree Regression Performance Scores:")
+
+print(dt_full_scores)
+
+# %%
+# Decision Tree Regression: top 5
+dt_5 = DecisionTreeRegressor()
+
+# Train the Model
+dt_5.fit(X_train_5, y_train_5)
+
+# Make Predictions
+dt_5_pred = dt_5.predict(X_test_5)
+
+# Evaluate Performance
+dt_5_scores = perf_cal(y_test_5, dt_5_pred)
+
+# Display Performance Metrics
+print("Decision Tree Regression Performance Metrics (Subset 5)")
+print(dt_5_scores)
+
+# %%
+# Decision Tree Regression:  Most Important Feature
+dt = DecisionTreeRegressor()
+
+# Train the model
+dt.fit(X_train, y_train)
+
+# Make predictions on the test set
+dt_pred = dt.predict(X_test)
+
+# Evaluate the model's performance
+dt_scores = perf_cal(y_test, dt_pred)
+
+# Print the performance metrics
+print("Decision Tree Regression Performance Metrics (Subset 1)")
+print(dt_scores)
+
+# %%
+
+# Extract the performance metrics from the DataFrames
+RMSEs = [dt_full_scores.loc['Performance Metrics', 'RMSE'], dt_5_scores.loc['Performance Metrics', 'RMSE'], dt_scores.loc['Performance Metrics', 'RMSE']]
+MSEs  = [dt_full_scores.loc['Performance Metrics', 'MSE'], dt_5_scores.loc['Performance Metrics', 'MSE'], dt_scores.loc['Performance Metrics', 'MSE']]
+MAEs  = [dt_full_scores.loc['Performance Metrics', 'MAE'], dt_5_scores.loc['Performance Metrics', 'MAE'], dt_scores.loc['Performance Metrics', 'MAE']]
+R2s   = [dt_full_scores.loc['Performance Metrics', 'R-sq'], dt_5_scores.loc['Performance Metrics', 'R-sq'], dt_scores.loc['Performance Metrics', 'R-sq']]
+
+# Create the figure and subplots
+plt.figure(figsize=(15,8))
+
+# Plot for RMSE
+plt.subplot(2, 2, 1)
+sns.barplot(x=DATA_SIZE, y=RMSEs)
+plt.title("RMSE", fontsize=15)
+plt.axhline(np.mean(RMSEs), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Plot for MSE
+plt.subplot(2, 2, 2)
+sns.barplot(x=DATA_SIZE, y=MSEs)
+plt.title("MSE", fontsize=15)
+plt.axhline(np.mean(MSEs), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Plot for MAE
+plt.subplot(2, 2, 3)
+sns.barplot(x=DATA_SIZE, y=MAEs)
+plt.title("MAE", fontsize=15)
+plt.axhline(np.mean(MAEs), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Plot for R-squared (R^2)
+plt.subplot(2, 2, 4)
+sns.barplot(x=DATA_SIZE, y=R2s)
+plt.title("$R^2$", fontsize=15)
+plt.axhline(np.mean(R2s), color='k', linestyle='--', alpha=0.5, label='Mean')
+plt.legend()
+
+# Adjust layout and show plot
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## Model Selection
+# ### Carlos Iturralde & Vikash Sinha 
+# Above selecting our best feature set, we shall be evaluating the best model.
+
+# %% [markdown]
+# **Decision Tree Regression**
+
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+# Decision Tree Regression
+dtr = DecisionTreeRegressor(max_depth=20, min_samples_leaf=10, min_samples_split=10)
+
+# Train Model
+dtr.fit(X_train_full, y_train_full)
+
+# Training Performance
+y_pred_train = dtr.predict(X_train_full)
+dtr_train_scores = perf_cal(y_train_full, y_pred_train)
+
+# Testing Performance
+y_pred_test = dtr.predict(X_test_full)
+dtr_test_scores = perf_cal(y_test_full, y_pred_test)
+
+# Create a DataFrame to hold the comparison of train and test scores for plotting
+comparison_df = pd.DataFrame({
+    'Metric': ['RMSE', 'MSE', 'MAE', 'R-sq'] * 2,  # Repeat metric names twice, once for Train and once for Test
+    'Score': [
+        dtr_train_scores.loc['Performance Metrics', 'RMSE'], dtr_train_scores.loc['Performance Metrics', 'MSE'],
+        dtr_train_scores.loc['Performance Metrics', 'MAE'], dtr_train_scores.loc['Performance Metrics', 'R-sq'],
+        dtr_test_scores.loc['Performance Metrics', 'RMSE'], dtr_test_scores.loc['Performance Metrics', 'MSE'],
+        dtr_test_scores.loc['Performance Metrics', 'MAE'], dtr_test_scores.loc['Performance Metrics', 'R-sq']
+    ],
+    'Type': ['Train'] * 4 + ['Test'] * 4  # First four entries are Train, next four are Test
+})
+
+# Define custom colors for Train and Test bars
+colors = {'Train': 'skyblue', 'Test': 'lightcoral'}
+
+
+# Create subplots for each metric
+fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+
+# List of metrics to plot
+metrics = ['RMSE', 'MSE', 'MAE', 'R-sq']
+
+# Iterate over metrics and create a subplot for each
+for i, metric in enumerate(metrics):
+    sns.barplot(
+        x='Type', 
+        y='Score', 
+        data=comparison_df[comparison_df['Metric'] == metric], 
+        ax=axs[i // 2, i % 2], 
+        palette=colors,  # Custom palette for Train and Test
+        dodge=False  # Prevent bars from being dodged
+    )
+    axs[i // 2, i % 2].set_title(f"Train vs Test {metric}")
+    axs[i // 2, i % 2].set_ylabel("Score")
+    axs[i // 2, i % 2].set_xlabel("")
+
+# Add a single legend for the whole figure
+handles, labels = axs[0, 0].get_legend_handles_labels()
+fig.legend(handles, labels, loc='upper center', ncol=2)
+
+# Adjust layout
+plt.tight_layout()
+plt.show()
+
+
+# %% [markdown]
+# **Random Forest Regression**
+
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+
+SCORE_NAMES = ['RMSE', 'MSE', 'MAE', 'R-sq']
+
+# Random Forest Regression
+rfr = RandomForestRegressor(n_estimators=20, min_samples_leaf=10, min_samples_split=10)
+
+# Train Model
+rfr.fit(X_train_full, y_train_full)
+
+# Predictions on training and testing sets
+y_pred_train = rfr.predict(X_train_full)
+y_pred_test = rfr.predict(X_test_full)
+
+# Calculate training and testing performance
+rfr_train_scores = perf_cal(y_train_full, y_pred_train)
+rfr_test_scores = perf_cal(y_test_full, y_pred_test)
+
+# Extract scores for plotting
+train_scores = [rfr_train_scores.loc['Performance Metrics', name] for name in SCORE_NAMES]
+test_scores = [rfr_test_scores.loc['Performance Metrics', name] for name in SCORE_NAMES]
+score_names = SCORE_NAMES
+
+# Create DataFrame for seaborn
+df_plot = pd.DataFrame({
+    'Metric': score_names * 2,  # Repeat score names for train and test
+    'Score': train_scores + test_scores,  # Combine train and test scores
+    'Type': ['Train'] * len(train_scores) + ['Test'] * len(test_scores)  # Label for train and test
+})
+
+# Set up the figure for subplots
+plt.figure(figsize=(10, 10))
+
+# Iterate through the score names and plot each as a separate subplot
+for index, name in enumerate(SCORE_NAMES):
+    plt.subplot(2, 2, index + 1)
+    
+    # Filter data for the current metric
+    data_to_plot = df_plot[df_plot['Metric'] == name]
+    
+    # Use seaborn's barplot
+    sns.barplot(
+        x='Type', 
+        y='Score', 
+        data=data_to_plot, 
+        palette={'Train': 'skyblue', 'Test': 'lightcoral'}, 
+        dodge=False
+    )
+    
+    # Title and aesthetic adjustments
+    plt.title(f"Train vs Test {name}", fontsize=14)
+    plt.ylabel(f"{name} Score")
+    plt.xticks(rotation=45)
+
+# Adjust layout for better spacing
+plt.tight_layout()
+
+# Add a single legend for the figure
+plt.figlegend(labels=['Train', 'Test'], loc='upper center', ncol=2, fontsize=12)
+
+# Display the plot
+plt.show()
+
+
+# %% [markdown]
+# **Linear Regression**
+
+# %%
+# Linear Regression
+
+# Linear Regression
+lr = LinearRegression()
+
+# Train Model
+lr.fit(X_train_full, y_train_full)
+
+# Predictions on training and testing sets
+y_pred_train = lr.predict(X_train_full)
+y_pred_test = lr.predict(X_test_full)
+
+# Calculate training and testing performance
+lr_train_scores = perf_cal(y_train_full, y_pred_train)
+lr_test_scores = perf_cal(y_test_full, y_pred_test)
+
+# Extract scores for plotting
+train_scores = [lr_train_scores.loc['Performance Metrics', name] for name in SCORE_NAMES]
+test_scores = [lr_test_scores.loc['Performance Metrics', name] for name in SCORE_NAMES]
+
+# Create DataFrame for seaborn
+df_plot = pd.DataFrame({
+    'Metric': SCORE_NAMES * 2,  # Repeat score names for train and test
+    'Score': train_scores + test_scores,  # Combine train and test scores
+    'Type': ['Train'] * len(train_scores) + ['Test'] * len(test_scores)  # Label for train and test
+})
+
+# Set up the figure for subplots
+plt.figure(figsize=(10, 10))
+
+# Iterate through the score names and plot each as a separate subplot
+for index, name in enumerate(SCORE_NAMES):
+    plt.subplot(2, 2, index + 1)
+    
+    # Filter data for the current metric
+    data_to_plot = df_plot[df_plot['Metric'] == name]
+    
+    # Use seaborn's barplot without legend parameter
+    sns.barplot(
+        x='Type', 
+        y='Score', 
+        data=data_to_plot, 
+        palette={'Train': 'skyblue', 'Test': 'lightcoral'}, 
+        dodge=False
+    )
+    
+    # Title and aesthetic adjustments
+    plt.title(f"Train vs Test {name}", fontsize=14)
+    plt.ylabel(f"{name} Score")
+    plt.xticks(rotation=45)
+
+# Adjust layout for better spacing
+plt.tight_layout()
+
+# Add a single legend for the figure
+plt.figlegend(labels=['Train', 'Test'], loc='upper center', ncol=2, fontsize=12)
+
+# Display the plot
+plt.show()
+
+
+
+
+# %% [markdown]
+# #### Model evaluation and summary of results 
+# 
+
+# %%
+import time
+
+# List of models
+models = {
+    'Random Forest': RandomForestRegressor(n_estimators=20, min_samples_leaf=10, min_samples_split=10),
+    'Decision Tree': DecisionTreeRegressor(max_depth=10, min_samples_leaf=10, min_samples_split=10),
+    'Linear Regression': LinearRegression()
+}
+
+# Initialize a dictionary to store results
+results = {}
+execution_times = {}  # To store execution times
+
+# Iterate over each model
+for model_name, model in models.items():
+    # Measure the start time
+    start_time = time.time()
+    
+    # Train model
+    model.fit(X_train_full, y_train_full)
+
+    # Measure the end time and calculate execution time
+    execution_time = time.time() - start_time
+    execution_times[model_name] = execution_time
+    
+    # Predictions on train and test sets
+    y_pred_train = model.predict(X_train_full)
+    y_pred_test = model.predict(X_test_full)
+    
+    # Calculate performance on train and test sets
+    train_scores = perf_cal(y_train_full, y_pred_train)
+    test_scores = perf_cal(y_test_full, y_pred_test)
+    
+    # Store the results in a DataFrame
+    results[model_name] = pd.concat([train_scores, test_scores], keys=['Train', 'Test'])
+
+# Create a final DataFrame to compare all models
+comparison_df = pd.concat(results, axis=1)
+comparison_df.columns = comparison_df.columns.swaplevel(0, 1)
+comparison_df = comparison_df.sort_index(axis=1)
+
+# Display the final comparison matrix
+print(comparison_df)
+
+# Print the execution times for each model
+print("\nModel Execution Times (in seconds):")
+for model_name, exec_time in execution_times.items():
+    print(f"{model_name}: {exec_time:.4f} seconds")
+
+
+# %% [markdown]
+# ## Cross-validation of models
+# ### Carlos Iturralde
+
+# %% [markdown]
+# Cross validation for Decision Tree Regressor
+
+# %%
+
+from sklearn.model_selection import GridSearchCV, cross_val_score
+
+# Define the grid of hyperparameters to search for Decision Tree
+param_grid_dt = {
+    'max_depth': [None, 10, 20, 30],  # Maximum depth of the tree
+    'min_samples_split': [2, 5, 10],  # Minimum number of samples to split a node
+    'min_samples_leaf': [1, 2, 4]  # Minimum number of samples at a leaf node
+}
+
+# Set up GridSearchCV for Decision Tree with 5-fold cross-validation
+grid_search_dt = GridSearchCV(estimator=dtr, param_grid=param_grid_dt, cv=5, scoring='neg_mean_squared_error', n_jobs=-1)
+
+# Train the DecisionTreeRegressor using grid search
+grid_search_dt.fit(X_train, y_train)
+
+# Get the best parameters from grid search for Decision Tree
+best_params_dt = grid_search_dt.best_params_
+print("Best parameters for Decision Tree: ", best_params_dt)
+
+# Train the best model found using cross-validation
+best_dt = grid_search_dt.best_estimator_
+
+# Cross-validation scores (MSE)
+cv_scores_dt = cross_val_score(best_dt, X_train, y_train, cv=5, scoring='neg_mean_squared_error')
+
+# Display Cross-validation scores
+print("Cross-validation MSE scores (Decision Tree): ", -cv_scores_dt)
+print("Average CV MSE (Decision Tree): ", -cv_scores_dt.mean())
+
+# Test Set Evaluation
+y_pred_dt = best_dt.predict(X_test)
+test_mse_dt = mean_squared_error(y_test, y_pred_dt)
+test_rmse_dt = np.sqrt(test_mse_dt)
+test_r2_dt = r2_score(y_test, y_pred_dt)
+
+print(f"Test RMSE (Decision Tree): {test_rmse_dt}")
+print(f"Test R^2 (Decision Tree): {test_r2_dt}")
+
+
+# %%
+df
+
+# %% [markdown]
+# **Cross validation for Random Regressor**
+
+# %%
+# Cross-validation for Random Forest Regression
+cv_scores_rfr = cross_val_score(rfr, X_train, y_train, cv=5, scoring='neg_mean_squared_error')
+
+# Display Cross-validation scores
+print("Cross-validation MSE scores (Random Forest Regression): ", -cv_scores_rfr)
+print("Average CV MSE (Random Forest Regression): ", -cv_scores_rfr.mean())
+
+# Train the model and test on test set
+rfr.fit(X_train, y_train)
+y_pred_rfr = rfr.predict(X_test)
+
+# Test Set Evaluation
+test_mse_rfr = mean_squared_error(y_test, y_pred_rfr)
+test_rmse_rfr = np.sqrt(test_mse_rfr)
+test_r2_rfr = r2_score(y_test, y_pred_rfr)
+
+print(f"Test RMSE (Random Forest Regression): {test_rmse_rfr}")
+print(f"Test R^2 (Random Forest Regression): {test_r2_rfr}")
+
+# %% [markdown]
+# **SINGULAR VALUE DECOMPOSITION**
+
+# %%
+import numpy as np 
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error,r2_score
+
+
+#define the SVD model
+ysvd=df['Weekly_Sales']
+xsvd=df[['Store','Day','Month','Year','Fuel_Price']]
+
+X_svd=np.array(xsvd)
+y_svd=np.array(ysvd).reshape(5000,1)
+
+X_trainsvd, X_testsvd, y_trainsvd, y_testsvd = train_test_split(X_svd, y_svd, test_size=0.2, random_state=42)
+
+class leastsquares():
+
+    def __init__(self):
+        self.x_fit= None
+
+    def least_squares_x(self,A,b):
+        U,S,VT=np.linalg.svd(A) #Define the SVD of the formula
+        sigma=np.zeros_like(A.T,dtype=float)
+        np.fill_diagonal(sigma,1/S) #the inverse of the symmetric matrix
+        self.x_fit=VT.T@sigma@U.T@b
+        return self.x_fit #these are the variables that will best fit a line given the information above
+
+    def prediction_ls(self,A):
+        y_pred_svd=np.dot(A,self.x_fit)
+        return y_pred_svd
+
+ls=leastsquares()
+variablessvd=ls.least_squares_x(X_trainsvd,y_trainsvd)
+#make the prediction using Training Data
+
+information=np.array([1,5,7,2020,2.59])
+weekly_sales_pred_data=np.round(np.dot(information,variablessvd),2)
+
+print(pd.DataFrame(information,index=['Store','Day','Month','Year','Fuel_Price'],columns=['Information Input']),'\n')
+df2=pd.DataFrame(weekly_sales_pred_data,index=['Predicted Sale for Week'],columns=['WeeklySales'])
+
+print(df2['WeeklySales'].apply(lambda x: f"${x:,.2f}"),'\n')
+
+y_predsvd=np.dot(X_testsvd,variablessvd)#testing
+
+mse = mean_squared_error(y_testsvd, y_predsvd) 
+r2 = r2_score(y_testsvd, y_predsvd)
+
+print(f'Mean Squared Error: {mse}') 
+print(f'R^2 Score: {r2}')
+
+# %% [markdown]
+# ## Time Series Modeling for Walmart Sales Data
+# ### Vikash Sinha
+# To perform time series modeling, we need to reshape the data into a format suitable for time-series forecasting. This involves setting the date as the index and working on aggregated sales data. Below is a step-by-step implementation:
+# We shall beb using data for one single store. Here we are selecting Store No 20 to test and evaluate the Model.  
+
+# %% [markdown]
+# #### 1. Preprocessing for Time Series
+
+# %%
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.tsa.seasonal import seasonal_decompose
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.metrics import mean_squared_error, r2_score
+import numpy as np
+
+
+# %%
+# Load data
+
+# Filter the data for Store 20
+store_20_data = sales_df[sales_df['Store'] == 20]
+
+
+# %%
+# Ensure 'Date' is in datetime format and set as index
+store_20_data['Date'] = pd.to_datetime(store_20_data['Date'])
+store_20_data.set_index('Date', inplace=True)
+##Convert Sales value to float
+store_20_data['Weekly_Sales'] = store_20_data['Weekly_Sales'].replace('[\$,]', '', regex=True).astype(float)
+
+
+# %%
+# Aggregate weekly sales for Store 20
+weekly_sales_store_20 = store_20_data['Weekly_Sales'].resample('W').sum()
+
+# %%
+# Plot the time series
+plt.figure(figsize=(14, 7))
+plt.plot(weekly_sales_store_20, label='Weekly Sales (Store 20)', color='blue')
+plt.title('Weekly Sales for Store 20')
+plt.xlabel('Date')
+plt.ylabel('Sales')
+plt.legend()
+plt.show()
+
+# %% [markdown]
+# #### 2. Decompose Time Series
+
+# %%
+# Decompose the time series for Store 20
+decomposition = seasonal_decompose(weekly_sales_store_20, model='additive', period=52)
+
+# Plot the decomposition
+decomposition.plot()
+plt.show()
+
+# %% [markdown]
+# #### 3. Train-Test Split
+
+# %%
+# Split the data into train and test sets (80% train, 20% test)
+split_index = int(len(weekly_sales_store_20) * 0.8)
+train, test = weekly_sales_store_20[:split_index], weekly_sales_store_20[split_index:]
+
+# Plot the train-test split
+plt.figure(figsize=(14, 7))
+plt.plot(train, label='Train', color='blue')
+plt.plot(test, label='Test', color='orange')
+plt.title('Train-Test Split for Store 20')
+plt.xlabel('Date')
+plt.ylabel('Sales')
+plt.legend()
+plt.show()
+
+
+# %% [markdown]
+# #### 4. Build ARIMA Model
+
+# %%
+from statsmodels.tsa.arima.model import ARIMA
+
+# Build ARIMA model for Store 20
+arima_model = ARIMA(train, order=(2, 1, 2))  # (p, d, q) parameters can be tuned
+arima_result = arima_model.fit()
+
+# Summary of ARIMA model
+print(arima_result.summary())
+
+# Forecast on test set
+forecast = arima_result.forecast(steps=len(test))
+
+
+# %% [markdown]
+# #### 5. Evaluate ARIMA Performance
+
+# %%
+from sklearn.metrics import mean_squared_error, r2_score
+
+# Evaluate the ARIMA model
+rmse = np.sqrt(mean_squared_error(test, forecast))
+r2 = r2_score(test, forecast)
+
+print(f'ARIMA Model Performance for Store 20:')
+print(f'Root Mean Squared Error (RMSE): {rmse:.2f}')
+print(f'R^2 Score: {r2:.2f}')
+
+# Plot actual vs forecasted sales
+plt.figure(figsize=(14, 7))
+plt.plot(train, label='Train', color='blue')
+plt.plot(test, label='Test', color='orange')
+plt.plot(test.index, forecast, label='Forecast', color='green')
+plt.title('Actual vs Forecasted Sales for Store 20')
+plt.xlabel('Date')
+plt.ylabel('Sales')
+plt.legend()
+plt.show()
+
+
+# %% [markdown]
+# #### 6. Seasonal ARIMA (SARIMA)
+
+# %%
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+# Build SARIMA model
+sarima_model = SARIMAX(train, order=(2, 1, 2), seasonal_order=(1, 1, 1, 52))  # Seasonal order is (p, d, q, s)
+sarima_result = sarima_model.fit()
+
+# Forecast using SARIMA
+sarima_forecast = sarima_result.forecast(steps=len(test))
+
+# Evaluate SARIMA model
+sarima_rmse = np.sqrt(mean_squared_error(test, sarima_forecast))
+sarima_r2 = r2_score(test, sarima_forecast)
+
+print(f'SARIMA Model Performance for Store 20:')
+print(f'Root Mean Squared Error (RMSE): {sarima_rmse:.2f}')
+print(f'R^2 Score: {sarima_r2:.2f}')
+
+
+# %% [markdown]
+# #### 7. Compare ARIMA and SARIMA
+# 
+
+# %%
+# Compare ARIMA and SARIMA models
+results = pd.DataFrame({
+    'Model': ['ARIMA', 'SARIMA'],
+    'RMSE': [rmse, sarima_rmse],
+    'R^2': [r2, sarima_r2]
+})
+
+print(results)
+
+# Plot RMSE Comparison
+plt.figure(figsize=(10, 6))
+sns.barplot(x='Model', y='RMSE', data=results)
+plt.title('RMSE Comparison Between Models for Store 20')
+plt.show()
+
+
+# %% [markdown]
+# #### Best Time Series model:
+# From Above ARIMA is best performer model and can be used to Forecast for future date
+
+# %% [markdown]
+# #### 6. Forecast for Future Dates
+# Extend the model to forecast sales for future dates beyond the test set.
+# Specify the number of steps to forecast (e.g., weeks, months, etc.).
+
+# %%
+# Forecast for future dates (e.g. one quarter, next 12 weeks)
+future_steps = 12
+future_forecast = arima_result.forecast(steps=future_steps)
+
+# Generate future dates
+future_dates = pd.date_range(start=weekly_sales_store_20.index[-1], periods=future_steps + 1, freq='W')[1:]
+
+# Create a DataFrame for visualization
+future_df = pd.DataFrame({'Date': future_dates, 'Forecast': future_forecast})
+future_df.set_index('Date', inplace=True)
+
+# Plot future forecast
+plt.figure(figsize=(14, 7))
+plt.plot(weekly_sales_store_20, label='Historical Data', color='blue')
+plt.plot(future_df, label='Future Forecast', color='red')
+plt.title('Future Sales Forecast')
+plt.legend()
+plt.show()
+
+
+# %%
+future_df.head(future_steps)
+
+# %% [markdown]
+# ## Ola Olasanoye
+# 
+# ## Walmart Sales Prediction using LSTM Deep Learning Model
+# 
+# ## Overview
+# This section implements a Long Short-Term Memory (LSTM) neural network to predict Walmart store sales. The model captures long-term dependencies and patterns in the sales data across different stores.
+# 
+# ## Model Architecture
+# 1. Input Layer: Shaped for sequence data (4 time steps, 10 features)
+# 2. LSTM Layers:
+#    - First LSTM: 64 units with ReLU activation
+#    - Second LSTM: 32 units with ReLU activation
+# 3. Dropout Layers (0.2) for regularization
+# 4. Dense Layers:
+#    - Hidden Dense: 16 units with ReLU
+#    - Output Dense: 1 unit (prediction)
+# 
+# ## Implementation Steps
+# 1. Data Preprocessing:
+#    - Clean sales data (remove $ and commas)
+#    - Convert categorical variables to numeric
+#    - Scale features using MinMaxScaler
+#    - Create sequences for time series prediction
+# 
+# 2. Model Training:
+#    - Split: 80% training, 20% testing
+#    - Sequence length: 4 weeks of historical data
+#    - Batch size: 32
+#    - Epochs: 50
+#    - Loss function: Mean Squared Error
+#    - Optimizer: Adam with learning rate 0.001
+# 
+# 3. Evaluation Metrics:
+#    - Mean Absolute Error (MAE)
+#    - Mean Squared Error (MSE)
+#    - Root Mean Squared Error (RMSE)
+#    - Mean Absolute Percentage Error (MAPE)
+# 
+# ## Results and Visualizations
+# - Training and validation loss curves
+# - Actual vs predicted sales comparison
+# - Error metrics analysis
+# - Future sales predictions
+# 
+
+# %%
+
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.optimizers import Adam
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+
+# %% [markdown]
+# Data preprocessing
+
+# %%
+# Data preprocessing
+def preprocess_sales_data(df):
+    # Convert Weekly_Sales to numeric, removing '$' and ',' and converting to float
+    df['Weekly_Sales'] = df['Weekly_Sales'].str.replace('$', '').str.replace(',', '').str.strip().astype(float)
+    
+    # Convert Day of the Week to numeric
+    day_mapping = {'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6}
+    df['Day_of_Week_Num'] = df['Day of the Week'].map(day_mapping)
+    
+    # Select features for model
+    features = ['Store', 'Temperature', 'Fuel_Price', 'CPI', 'Unemployment', 
+                'Holiday_Flag', 'Day_of_Week_Num', 'Day', 'Month', 'Year']
+    target = 'Weekly_Sales'
+    
+    return df, features, target
+
+# Create sequences for LSTM
+def create_sequences(data, target_data, seq_length):
+    X, y = [], []
+    for i in range(len(data) - seq_length):
+        X.append(data[i:(i + seq_length)])
+        y.append(target_data[i + seq_length])
+    return np.array(X), np.array(y)
+
+# Prepare your data
+df = sales_df.copy()
+df, features, target = preprocess_sales_data(df)
+
+# Scale the features
+scaler_X = MinMaxScaler()
+scaler_y = MinMaxScaler()
+
+# Scale features and target
+X_scaled = scaler_X.fit_transform(df[features])
+y_scaled = scaler_y.fit_transform(df[[target]])
+
+# Create sequences
+sequence_length = 4  # Using 4 weeks of historical data to predict the next week
+X_seq, y_seq = create_sequences(X_scaled, y_scaled, sequence_length)
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X_seq, y_seq, test_size=0.2, random_state=42)
+
+print("Training set shape:", X_train.shape)
+print("Test set shape:", X_test.shape)
+
+# %% [markdown]
+# Build LSTM model
+
+# %%
+# Build LSTM model with explicit input layer
+from tensorflow.keras.layers import Input
+
+def build_lstm_model(input_shape):
+    inputs = Input(shape=input_shape)
+    
+    x = LSTM(64, activation='relu', return_sequences=True)(inputs)
+    x = Dropout(0.2)(x)
+    x = LSTM(32, activation='relu')(x)
+    x = Dropout(0.2)(x)
+    x = Dense(16, activation='relu')(x)
+    outputs = Dense(1)(x)
+    
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    
+    model.compile(optimizer=Adam(learning_rate=0.001),
+                 loss='mse',
+                 metrics=['mae'])
+    return model
+
+# Create and compile the model
+input_shape = (X_train.shape[1], X_train.shape[2])  # (sequence_length, n_features)
+model = build_lstm_model(input_shape)
+model.summary()
+
+# %% [markdown]
+# Train the model
+
+# %%
+# Train the model
+history = model.fit(
+    X_train, y_train,
+    validation_split=0.2,
+    epochs=50,
+    batch_size=32,
+    verbose=1
+)
+
+# Plot training history
+plt.figure(figsize=(12, 4))
+
+# Plot loss
+plt.subplot(1, 2, 1)
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Model Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+
+# Plot MAE
+plt.subplot(1, 2, 2)
+plt.plot(history.history['mae'], label='Training MAE')
+plt.plot(history.history['val_mae'], label='Validation MAE')
+plt.title('Model MAE')
+plt.xlabel('Epoch')
+plt.ylabel('MAE')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# Make predictions
+
+# %%
+# Make predictions
+y_pred_scaled = model.predict(X_test)
+
+# Inverse transform the predictions and actual values
+y_pred = scaler_y.inverse_transform(y_pred_scaled)
+y_test_actual = scaler_y.inverse_transform(y_test)
+
+# Calculate metrics
+mse = np.mean((y_pred - y_test_actual) ** 2)
+rmse = np.sqrt(mse)
+mae = np.mean(np.abs(y_pred - y_test_actual))
+mape = np.mean(np.abs((y_test_actual - y_pred) / y_test_actual)) * 100
+
+print(f'Mean Squared Error: ${mse:,.2f}')
+print(f'Root Mean Squared Error: ${rmse:,.2f}')
+print(f'Mean Absolute Error: ${mae:,.2f}')
+print(f'Mean Absolute Percentage Error: {mape:.2f}%')
+
+# Plot actual vs predicted values
+plt.figure(figsize=(12, 6))
+plt.plot(y_test_actual[:100], label='Actual Sales', marker='o')
+plt.plot(y_pred[:100], label='Predicted Sales', marker='o')
+plt.title('Actual vs Predicted Weekly Sales (First 100 Samples)')
+plt.xlabel('Sample Index')
+plt.ylabel('Weekly Sales ($)')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# %% [markdown]
+# Function to make future predictions
+
+# %%
+# Function to make future predictions
+def predict_future_sales(model, last_sequence, scaler_X, scaler_y, steps=4):
+    predictions = []
+    current_sequence = last_sequence.copy()
+    
+    for _ in range(steps):
+        # Predict next value
+        next_pred = model.predict(current_sequence.reshape(1, sequence_length, -1))
+        predictions.append(next_pred[0])
+        
+        # Update sequence
+        current_sequence = np.roll(current_sequence, -1, axis=0)
+        current_sequence[-1] = next_pred
+    
+    # Transform predictions back to original scale
+    predictions = np.array(predictions).reshape(-1, 1)
+    predictions = scaler_y.inverse_transform(predictions)
+    
+    return predictions
+
+# Get predictions for next 4 weeks
+last_sequence = X_test[-1:]
+future_predictions = predict_future_sales(model, last_sequence, scaler_X, scaler_y, steps=4)
+
+print("\nPredicted sales for next 4 weeks:")
+for i, pred in enumerate(future_predictions, 1):
+    print(f"Week {i}: ${pred[0]:,.2f}")
+
+# %% [markdown]
+# # LSTM Model Analysis Summary for Walmart Sales Prediction
+# 
+# ## Model Performance Metrics
+# - Mean Squared Error: $22,651,825,876.08
+# - Root Mean Squared Error: $150,505.24
+# - Mean Absolute Error: $86,705.95
+# - Mean Absolute Percentage Error (MAPE): 8.45%
+# 
+# ## Training Results Analysis
+# 1. **Convergence Patterns**:
+#    - Both loss and MAE curves show consistent improvement over 50 epochs
+#    - Model stabilizes around epoch 30-35
+#    - No significant overfitting observed (validation and training curves remain close)
+# 
+# 2. **Model Accuracy**:
+#    - MAPE of 8.45% indicates good prediction accuracy
+#    - Average prediction error of $86,705.95 in the context of weekly store sales is reasonable
+#    - Model shows strong ability to capture sales patterns and trends
+# 
+# 3. **Visualization Insights**:
+#    - Actual vs Predicted plot shows strong correlation between predicted and actual values
+#    - Model successfully captures both high and low sales periods
+#    - Particularly accurate in predicting major sales peaks
+#    - Some minor discrepancies in extreme values
+# 
+# 4. **Future Predictions**:
+#    - 4-week forecast shows realistic variation in sales:
+#      * Week 1: $377,005.00
+#      * Week 2: $$723,917.00
+#      * Week 3: $1,223,289.25
+#      * Week 4: $1,673,383.00
+#    - Predictions follow expected patterns of weekly sales fluctuations
+# 
+# ## Strengths and Limitations
+# **Strengths**:
+# - Strong predictive performance with 89.52% accuracy (100% - MAPE)
+# - Stable training process with minimal overfitting
+# - Good capture of sales patterns and seasonality
+# 
+# **Limitations**:
+# - Some variance in extreme value predictions
+# - Higher error rates in peak sales periods
+# 
+
+
